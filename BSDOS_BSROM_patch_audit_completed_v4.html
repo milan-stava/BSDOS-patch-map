@@ -1,0 +1,474 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Mapa paměti BSDOS, BSROM a patchů</title>
+  <style>
+    :root { --bg:#f4f7fb; --paper:#fff; --ink:#172033; --muted:#5e6b82; --line:#d8e0ec; --blue:#1769aa; --blue2:#eaf4ff; --yellow:#ffd65a; --green:#257a48; --red:#b42318; --orange:#a15c00; }
+    * { box-sizing:border-box; }
+    body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+    main { max-width:1180px; margin:28px auto; padding:0 18px 60px; }
+    header, section { background:var(--paper); border:1px solid var(--line); border-radius:12px; padding:24px; margin:0 0 18px; box-shadow:0 2px 10px rgba(24,40,72,.04); }
+    h1 { margin:0 0 6px; font-size:30px; line-height:1.2; }
+    h2 { margin:0 0 16px; padding:8px 11px; background:var(--yellow); border-radius:6px; font-size:21px; }
+    h3 { margin:22px 0 10px; color:#123e68; }
+    p { margin:8px 0 12px; }
+    .sub { color:var(--muted); }
+    .tag { display:inline-block; padding:2px 8px; margin:2px 4px 2px 0; border-radius:999px; background:var(--blue2); color:#174f7d; font-size:12px; font-weight:700; }
+    .ok { color:var(--green); font-weight:700; }
+    .warn { color:var(--orange); font-weight:700; }
+    .bad { color:var(--red); font-weight:700; }
+    .callout { border-left:5px solid var(--blue); background:var(--blue2); padding:12px 14px; margin:14px 0; }
+    .danger { border-left-color:var(--red); background:#fff0ef; }
+    .note { border-left-color:var(--yellow); background:#fff9df; }
+    table { width:100%; border-collapse:collapse; margin:10px 0 18px; font-variant-numeric:tabular-nums; }
+    th, td { border:1px solid var(--line); padding:8px 9px; text-align:left; vertical-align:top; }
+    th { background:#173e64; color:#fff; }
+    tr:nth-child(even) td { background:#f8fbff; }
+    code, pre { font-family:"Cascadia Mono","Consolas",monospace; }
+    code { background:#eef2f7; padding:1px 4px; border-radius:4px; }
+    pre { background:#111b2b; color:#dcecff; padding:13px; overflow:auto; border-radius:7px; line-height:1.45; }
+    details { border:1px solid var(--line); border-radius:8px; margin:10px 0; background:#fff; }
+    summary { cursor:pointer; padding:12px 14px; font-weight:750; color:#153f66; }
+    details > div { padding:0 14px 14px; }
+    .small { font-size:13px; color:var(--muted); }
+    .nowrap { white-space:nowrap; }
+    .patch-overview tbody tr.patch-start td { border-top:3px solid #8aa4bd; }
+    .patch-overview td.patch-name { font-weight:800; background:#f3f6fa !important; }
+    .patch-overview td.patch-total { font-weight:800; background:#eaf4ff !important; white-space:nowrap; vertical-align:middle; }
+    .page-badge { display:inline-block; min-width:92px; padding:4px 9px; border-radius:6px; font-weight:850; text-align:center; border:1px solid rgba(0,0,0,.12); }
+    .page0 { background:#dceeff; color:#0b4776; }
+    .page1 { background:#fff0a8; color:#554000; }
+    .page2 { background:#eadfff; color:#4a2879; }
+    .page3 { background:#ffe0c2; color:#713b00; }
+    .page4 { background:#ffdce8; color:#7b2444; }
+    .page5 { background:#e5e8ec; color:#34404b; }
+    .page9 { background:#dff4df; color:#225b2e; }
+    .free-table td:first-child { font-weight:800; }
+    .free-table tr.free-total td { background:#e5f5ea !important; font-weight:800; border-top:3px solid #4d8a63; }
+    .free-table tr.free-conditional td { background:#fff8db !important; }
+    @media print { body{background:#fff;font-size:11px} main{max-width:none;margin:0;padding:0} header,section{box-shadow:none;break-inside:auto} details{break-inside:avoid} details>div{display:block} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Mapa paměti BSDOS, BSROM, patchů a EasySD/EasyCF</h1>
+    <p class="sub">Memory map of BSDOS, BSROM, supplied historical patches and EasySD/EasyCF</p>
+    <p><span class="tag">Z80</span><span class="tag">MB03+</span><span class="tag">SRAM stránky 0–32</span><span class="tag">statická binární analýza</span></p>
+    <p>Původní audit historických patchů: 14. 9. 2026. Rozšířeno 24. 9. 2026 o finální MB03+ instalátory EasySD/EasyCF 1.0.1 a 1.1.</p>
+  </header>
+
+  <section>
+    <h2>1. Závěr v kostce / Executive summary</h2>
+    <div class="callout"><strong>Výsledek rozšíření:</strong> EasyCF 1.0.1, EasySD 1.0.1 a EasyCF 1.1 používají jako driverovou fyzickou SRAM stránku 2. Finální kombinace 1.1 používá stránku 2 pro EasyCF a samostatnou volitelnou stránku 6–32 pro EasySD (výchozí stránka 9). Po instalaci EasySD 1.1 zbývá v potvrzených původních volných oblastech BSDOSu <strong>35 B</strong>; ve stránce 2 po historických instalacích a EasyCF 1.1 zůstává <strong>8 369 B nezapsaných</strong> a v nové stránce 9 po EasySD 1.1 <strong>13 529 B nezapsaných</strong>.</div>
+    <h3>Úvodní přehled patchů / Patch overview</h3>
+    <p class="small"><strong>Čtení tabulky:</strong> každý řádek nyní odpovídá právě <strong>jedné fyzické SRAM stránce</strong>. Barva štítku stránky je stejná v celé tabulce. Sloupec <strong>Délka na stránce</strong> patří pouze k danému řádku; sloupec <strong>Celkem patch</strong> je součet přes všechny stránky daného patche.</p>
+    <table class="patch-overview">
+      <thead><tr><th>Patch</th><th>Fyzická stránka</th><th>Obsazený / zapisovaný rozsah</th><th>Délka na stránce</th><th>Celkem patch</th><th>Poznámka</th></tr></thead>
+      <tbody>
+        <tr class="patch-start">
+          <td class="patch-name" rowspan="5"><code>nmi165MB03</code></td>
+          <td><span class="page-badge page0">0 – BSROM</span></td>
+          <td><code>#3931–#3972</code>, <code>#39A1–#39B8</code></td>
+          <td><strong><code>#005A</code> = 90 B</strong></td>
+          <td class="patch-total" rowspan="5"><code>#80BF</code><br>= 32 959 B</td>
+          <td rowspan="5">Stránky 3 a 4 instalátor celé vynuluje a používá jako vlastní rezidentní prostor; proto se počítá celých 16 KiB každé stránky.</td>
+        </tr>
+        <tr><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#0340–#0357</code></td><td><strong><code>#0018</code> = 24 B</strong></td></tr>
+        <tr><td><span class="page-badge page2">2</span></td><td><code>#39A1–#39ED</code></td><td><strong><code>#004D</code> = 77 B</strong></td></tr>
+        <tr><td><span class="page-badge page3">3</span></td><td><code>#0000–#3FFF</code></td><td><strong><code>#4000</code> = 16 384 B</strong></td></tr>
+        <tr><td><span class="page-badge page4">4</span></td><td><code>#0000–#3FFF</code></td><td><strong><code>#4000</code> = 16 384 B</strong></td></tr>
+
+        <tr class="patch-start">
+          <td class="patch-name"><code>Patch23388</code></td><td><span class="page-badge page0">0 – BSROM</span></td>
+          <td><code>#0F06–#0F21</code>, <code>#3BFA–#3BFE</code></td><td><strong><code>#0021</code> = 33 B</strong></td>
+          <td class="patch-total"><code>#0021</code><br>= 33 B</td><td>Zapsáno 33 B, skutečně změněno 32 B.</td>
+        </tr>
+
+        <tr class="patch-start">
+          <td class="patch-name"><code>case_insen</code></td><td><span class="page-badge page1">1 – BSDOS</span></td>
+          <td><code>#22D9–#22F5</code>, hook <code>#0D0D–#0D0E</code></td><td><strong><code>#001F</code> = 31 B</strong></td>
+          <td class="patch-total"><code>#001F</code><br>= 31 B</td><td>29 B nová rutina + 2 B přesměrování původního <code>CALL</code>.</td>
+        </tr>
+
+        <tr class="patch-start">
+          <td class="patch-name" rowspan="2"><code>m64a4_pg5</code></td><td><span class="page-badge page0">0 – BSROM</span></td>
+          <td><code>#0000–#3FFF</code></td><td><strong><code>#4000</code> = 16 384 B</strong></td>
+          <td class="patch-total" rowspan="2"><code>#8000</code><br>= 32 768 B</td>
+          <td rowspan="2">Fyzicky zapisuje celé obě stránky. Na stránce 0 má 104 B (<code>#0068</code>) úspěšných patchovacích cílů a proti základu mění 94 B.</td>
+        </tr>
+        <tr><td><span class="page-badge page5">5</span></td><td><code>#0000–#3FFF</code></td><td><strong><code>#4000</code> = 16 384 B</strong></td></tr>
+
+        <tr class="patch-start">
+          <td class="patch-name" rowspan="2"><code>pit103_rtc</code></td><td><span class="page-badge page1">1 – BSDOS</span></td>
+          <td><code>#0383–#03BD</code> + odkazy <code>#0D50</code>, <code>#0EF7–#0EF8</code>, <code>#0F11–#0F12</code></td>
+          <td><strong><code>#0040</code> = 64 B</strong></td><td class="patch-total" rowspan="2"><code>#0BBF</code><br>= 3 007 B</td>
+          <td rowspan="2">V BSDOSu je vlastní tělo 59 B (<code>#003B</code>) a 5 B odkazů/hooků.</td>
+        </tr>
+        <tr><td><span class="page-badge page2">2</span></td><td><code>#0038–#0039</code>, <code>#0383–#0EFF</code></td><td><strong><code>#0B7F</code> = 2 943 B</strong></td></tr>
+
+        <tr class="patch-start">
+          <td class="patch-name"><code>PUF11</code></td><td><span class="page-badge page1">1 – BSDOS</span></td>
+          <td><code>#03EB</code>, <code>#1683–#168E</code>, <code>#16D7–#1739</code>, <code>#1A9B–#1AA6</code></td>
+          <td><strong><code>#007C</code> = 124 B</strong></td><td class="patch-total"><code>#007C</code><br>= 124 B</td><td>Zapsáno 124 B, skutečně změněno 121 B.</td>
+        </tr>
+
+        <tr class="patch-start">
+          <td class="patch-name" rowspan="2"><code>rtc_patP2r</code></td><td><span class="page-badge page1">1 – BSDOS</span></td>
+          <td><code>#1680–#1682</code>, <code>#3C20–#3C4D</code></td><td><strong><code>#0031</code> = 49 B</strong></td>
+          <td class="patch-total" rowspan="2"><code>#015A</code><br>= 346 B</td><td rowspan="2">Na stránce 1 se skutečně mění 42 z 49 zapisovaných bajtů.</td>
+        </tr>
+        <tr><td><span class="page-badge page2">2</span></td><td><code>#3AFC–#3C1D</code>, <code>#3C30–#3C36</code></td><td><strong><code>#0129</code> = 297 B</strong></td></tr>
+
+        <tr class="patch-start">
+          <td class="patch-name"><code>dos_26znak</code></td><td><span class="page-badge page1">1 – BSDOS</span></td>
+          <td><code>#0DE5–#0DEC</code>, <code>#0DFC</code>, <code>#0DFE–#0E03</code>, <code>#0E4D–#0E54</code>, <code>#20B0–#20B9</code></td>
+          <td><strong><code>#0021</code> = 33 B cílů</strong></td><td class="patch-total"><code>#0021</code><br>= 33 B cílů</td>
+          <td>0 skutečných změn proti dodanému BSDOSu; nově zabraný rezidentní prostor je 0 B.</td>
+        </tr>
+
+        <tr class="patch-start">
+          <td class="patch-name"><code>bluelagoon</code></td><td><span class="page-badge page0">0 – BSROM</span></td>
+          <td><code>#1266</code>, <code>#128E</code></td><td><strong><code>#0002</code> = 2 B</strong></td><td class="patch-total"><code>#0002</code><br>= 2 B</td><td>Dva jednotlivé bajty.</td>
+        </tr>
+
+        <tr class="patch-start">
+          <td class="patch-name" rowspan="2"><code>ALASM</code><br><span class="small">(<code>alMB64 C.3</code>)</span></td><td><span class="page-badge page2">2</span></td>
+          <td><code>#2710–#3251</code></td><td><strong><code>#0B42</code> = 2 882 B</strong></td>
+          <td class="patch-total" rowspan="2"><code>#0B48</code><br>= 2 888 B</td><td rowspan="2">Do stránky 1/BSDOS nic neinstaluje.</td>
+        </tr>
+        <tr><td><span class="page-badge page0">0 – BSROM</span></td><td><code>#3CE9–#3CEE</code></td><td><strong><code>#0006</code> = 6 B</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Volná místa v BSDOSu po historických patchích</h3>
+    <p class="small">Tato tabulka se týká výhradně <span class="page-badge page1">stránky 1 – BSDOS</span>. Každý řádek je samostatná potvrzená volná oblast.</p>
+    <table class="free-table">
+      <thead><tr><th>Stav</th><th>Fyzická stránka</th><th>Volný rozsah</th><th>Volno</th><th>Poznámka</th></tr></thead>
+      <tbody>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#006C–#007F</code></td><td><strong><code>#0014</code> = 20 B</strong></td><td class="ok">Potvrzené volné místo.</td></tr>
+        <tr class="free-conditional"><td>VOLNO*</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#0090–#00FF</code></td><td><strong><code>#0070</code> = 112 B</strong></td><td class="warn">Pouze pokud není aktivní ramdrive patch.</td></tr>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#0358–#0382</code></td><td><strong><code>#002B</code> = 43 B</strong></td><td class="ok">Mezera mezi NMI a PIT.</td></tr>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#03BE–#03BF</code></td><td><strong><code>#0002</code> = 2 B</strong></td><td class="ok">Zbytek původní oblasti <code>#0340–#03BF</code>.</td></tr>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#22F6–#22FF</code></td><td><strong><code>#000A</code> = 10 B</strong></td><td class="ok">Jediná volná část původního rozsahu po <code>case_insen</code>. Adresy <code>#22D9–#22F5</code> jsou ve starém EasyHDD obsazené a nesmějí se přepsat.</td></tr>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#3C90–#3C97</code></td><td><strong><code>#0008</code> = 8 B</strong></td><td class="ok">Celá původní oblast zůstává volná.</td></tr>
+        <tr><td>VOLNO</td><td><span class="page-badge page1">1 – BSDOS</span></td><td><code>#3CE3–#3CEF</code></td><td><strong><code>#000D</code> = 13 B</strong></td><td class="ok">Volné v BSDOSu; stejná adresa v BSROMu je jiná fyzická stránka.</td></tr>
+        <tr class="free-total"><td>CELKEM</td><td><span class="page-badge page1">1 – BSDOS</span></td><td>7 potvrzených oblastí</td><td><strong><code>#00D0</code> = 208 B</strong></td><td>Včetně podmíněné oblasti <code>#0090–#00FF</code>. Bez ní je jistých <strong><code>#0060</code> = 96 B</strong>. Oblast <code>#0000–#0037</code> není započítána.</td></tr>
+      </tbody>
+    </table>
+    <p class="small"><strong>Důležité:</strong> „Délka na stránce“ znamená zapisovaný nebo rezervovaný rozsah pouze na zobrazené fyzické stránce. „Celkem patch“ je součet těchto rozsahů přes všechny stránky daného patche. Neznamená automaticky spotřebu původně volného místa BSDOSu, protože řada patchů přepisuje existující kód.</p>
+    <ul>
+      <li>Původní tabulka obsahuje <strong>320 bajtů</strong> souvislého volného místa v BSDOSu (bez nesouvislé oblasti <code>#0000–#0037</code>).</li>
+      <li>Historické patche z tohoto volného místa využijí <strong>112 bajtů</strong>: NMI 24 B, PIT 59 B a case-insensitive patch 29 B. Zůstává <strong>208 bajtů</strong>.</li>
+      <li>Na fyzické SRAM stránce 2 zabírají dodané historické instalace dohromady <strong>6 199 bajtů</strong>. Jejich rozsahy se přímo nepřekrývají.</li>
+      <li><code>m64a4_pg5</code> vytváří celý 16KiB obraz stránky 0 i stránky 5. Spuštěn později tedy smaže dříve provedené patche ve stránce 0/BSROM, i když jeho vlastní změněné adresy s nimi nekolidují.</li>
+      <li>ALASM při instalaci <strong>nemění BSDOS</strong>. Instaluje 2 882 B do stránky 2 a šestibajtovou pomocnou rutinu do stránky 0/BSROM.</li>
+      <li><code>dos_26znak</code> proti dodanému <code>BSDOS.rom</code> nemění žádný bajt: všechny cílové hodnoty už jsou totožné. Patch je v tomto obrazu již obsažen nebo je pro něj zbytečný.</li>
+    </ul>
+    <div class="callout danger"><strong>Doporučené pořadí:</strong> pokud se používá <code>m64a4_pg5</code>, spustit jej jako první. Teprve potom instalovat NMI, Patch23388, bluelagoon a ALASM, které doplňují stránku 0/BSROM po částech.</div>
+  </section>
+
+  <section>
+    <h2>2. Názvosloví SRAM stránek / Page terminology</h2>
+    <p>Čísla 96–101 nejsou fyzická čísla stránek; jsou to desetinné řídicí hodnoty obsahující i příznak zápisu. V dokumentu se proto primárně používají fyzická čísla stránek. EasySD 1.1 na MB03+ dovoluje fyzickou stránku 6–32.</p>
+    <table>
+      <thead><tr><th>Fyzická stránka</th><th>Známé použití</th><th>Výběr pro čtení</th><th>Výběr pro zápis</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>BSROM</td><td><code>#40</code> (64)</td><td><code>#60</code> (96)</td></tr>
+        <tr><td>1</td><td>BSDOS</td><td><code>#41</code> (65)</td><td><code>#61</code> (97)</td></tr>
+        <tr><td>2</td><td>EasySD/EasyCF, ALASM, PIT, RTC, NMI</td><td><code>#42</code> (66)</td><td><code>#62</code> (98)</td></tr>
+        <tr><td>3</td><td>NMI</td><td><code>#43</code> (67)</td><td><code>#63</code> (99)</td></tr>
+        <tr><td>4</td><td>NMI</td><td><code>#44</code> (68)</td><td><code>#64</code> (100)</td></tr>
+        <tr><td>5</td><td><code>m64a4_pg5</code></td><td><code>#45</code> (69)</td><td><code>#65</code> (101)</td></tr>
+        <tr><td>6–32</td><td>Volitelná samostatná stránka EasySD 1.1; výchozí je 9</td><td><code>#46–#60</code> (70–96)</td><td><code>#66–#80</code> (102–128); stránka 9 = <code>#69</code> (105)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>3. Vstupní soubory a metoda / Inputs and method</h2>
+    <table>
+      <thead><tr><th>Soubor</th><th>Velikost</th><th>SHA-256</th><th>Role</th></tr></thead>
+      <tbody>
+        <tr><td><code>BSDOS.rom</code></td><td>16 384 B</td><td><code>3ebd1653f3ab85de2966f03f7fc9cef0d600a672bc6ab8ecb8431ea01fc0e84b</code></td><td>Základ stránky 1</td></tr>
+        <tr><td><code>BSROM140_EL.rom</code></td><td>16 384 B</td><td><code>b2883bbe4d900b65d5843726ed9c69a7c2642ec83127bbdd90b39d1a9ebfe9a8</code></td><td>Základ stránky 0; větev BSROM 1.40</td></tr>
+        <tr><td><code>testuik.zip</code></td><td>86 336 B</td><td><code>e7bbd8754bb2752e1f2aa130e9c1b9e92ee34274f167c578f69b56cf754e7893</code></td><td>Instalátory a ALASM</td></tr>
+      </tbody>
+    </table>
+    <p>Postup: lineární i cílené Z80 disassemblování, rekonstrukce operací <code>LDIR</code> a přímých zápisů, sledování hodnot portu <code>#17</code> a bajtové porovnání rekonstruovaných výsledků s dodanými ROM.</p>
+    <p class="small"><strong>Zapsáno</strong> = cílové bajty, na které instalátor zapisuje. <strong>Skutečně změněno</strong> = bajty odlišné od dodaného základu. <strong>Rezervováno</strong> = prostor, který musí zůstat patchi k dispozici. Nulové bajty mimo známé rozsahy nejsou automaticky považovány za bezpečně volné.</p>
+  </section>
+
+  <section>
+    <h2>4. Původní volná místa v BSDOSu / Original BSDOS free space</h2>
+    <table>
+      <thead><tr><th>Rozsah</th><th>Délka</th><th>Stav po historických patchích</th></tr></thead>
+      <tbody>
+        <tr><td><code>#0000–#0037</code></td><td>nezapočítáno</td><td>Nesouvislé části; vyžadují samostatnou analýzu instrukcí.</td></tr>
+        <tr><td><code>#006C–#007F</code></td><td><code>#14</code> = 20 B</td><td class="ok">Celé zbývá</td></tr>
+        <tr><td><code>#0090–#00FF</code></td><td><code>#70</code> = 112 B</td><td class="ok">Celé zbývá, pokud není aktivní ramdrive patch</td></tr>
+        <tr><td><code>#0340–#03BF</code></td><td><code>#80</code> = 128 B</td><td>NMI: <code>#0340–#0357</code>; PIT: <code>#0383–#03BD</code>. Zbývá <code>#0358–#0382</code> (43 B) a <code>#03BE–#03BF</code> (2 B).</td></tr>
+        <tr><td><code>#22D9–#22FF</code></td><td><code>#27</code> = 39 B</td><td><code>case_insen</code>: <code>#22D9–#22F5</code> (29 B, potvrzeno přímo ve starém EasyHDD). Zbývá pouze <code>#22F6–#22FF</code> (10 B).</td></tr>
+        <tr><td><code>#3C90–#3C97</code></td><td><code>#08</code> = 8 B</td><td class="ok">Celé zbývá</td></tr>
+        <tr><td><code>#3CE3–#3CEF</code></td><td><code>#0D</code> = 13 B</td><td class="ok">Celé zbývá v BSDOSu. Pozor: stejná adresa v BSROMu je jiný obsah.</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Součet původních souvislých oblastí:</strong> <code>#140</code> = 320 B. <strong>Po dodaných historických patchích:</strong> 208 B.</p>
+  </section>
+
+  <section>
+    <h2>5. Souhrnná mapa podle fyzických stránek</h2>
+    <table>
+      <thead><tr><th>Stránka</th><th>Patch / rozsahy</th><th>Souhrn</th></tr></thead>
+      <tbody>
+        <tr><td>0 – BSROM</td><td>Patch23388, bluelagoon, NMI, ALASM, m64a4</td><td>Po doporučeném pořadí je vůči dodanému BSROM odlišných 222 bajtů. <code>m64a4</code> však fyzicky zapisuje všech 16 KiB.</td></tr>
+        <tr><td>1 – BSDOS</td><td>NMI, PIT, case_insen, PUF, RTC; dos_26znak bez nové změny</td><td>280 bajtů se skutečně změní; z deklarovaných volných oblastí se spotřebuje 112 B.</td></tr>
+        <tr><td>2</td><td><code>#0038–#0039</code>, <code>#0383–#0EFF</code>, <code>#2710–#3251</code>, <code>#39A1–#39ED</code>, <code>#3AFC–#3C1D</code>, <code>#3C30–#3C36</code></td><td>6 199 B známých instalovaných oblastí; bez vzájemného překrytí.</td></tr>
+        <tr><td>3</td><td>NMI</td><td>Celá stránka 16 KiB je při instalaci vynulována, potom naplněna daty a kódem.</td></tr>
+        <tr><td>4</td><td>NMI</td><td>Celá stránka 16 KiB je při instalaci vynulována, potom naplněna daty a kódem.</td></tr>
+        <tr><td>5</td><td>m64a4_pg5</td><td>Celá stránka 16 KiB je vytvořena a zapsána.</td></tr>
+      </tbody>
+    </table>
+    <h3>Oblasti stránky 2 nezapsané dodanými historickými instalátory</h3>
+    <table>
+      <thead><tr><th>Rozsah</th><th>Délka</th></tr></thead>
+      <tbody>
+        <tr><td><code>#0000–#0037</code></td><td>56 B</td></tr>
+        <tr><td><code>#003A–#0382</code></td><td>841 B</td></tr>
+        <tr><td><code>#0F00–#270F</code></td><td>6 160 B</td></tr>
+        <tr><td><code>#3252–#39A0</code></td><td>1 871 B</td></tr>
+        <tr><td><code>#39EE–#3AFB</code></td><td>270 B</td></tr>
+        <tr><td><code>#3C1E–#3C2F</code></td><td>18 B</td></tr>
+        <tr><td><code>#3C37–#3FFF</code></td><td>969 B</td></tr>
+      </tbody>
+    </table>
+    <p class="small">Celkem 10 185 B. Jde o místa nezapsaná analyzovanými historickými instalátory, nikoliv automaticky o potvrzený volný prostor pro EasySD/EasyCF.</p>
+  </section>
+
+  <section>
+    <h2>6. Jednotlivé patche / Per-patch analysis</h2>
+
+    <details open><summary>nmi165MB03 — 20 478 B, STA 28000 (<code>#6D60</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Zápisy</th><th>Zapsáno / změněno</th></tr></thead><tbody>
+        <tr><td>0 – BSROM</td><td><code>#3931–#3972</code>, <code>#39A1–#39B8</code></td><td>90 / 88 B</td></tr>
+        <tr><td>1 – BSDOS</td><td><code>#0340–#0357</code></td><td>24 / 22 B</td></tr>
+        <tr><td>2</td><td><code>#39A1–#39ED</code></td><td>77 B</td></tr>
+        <tr><td>3</td><td>Vynulování <code>#0000–#3FFF</code>; kopie mj. <code>#0101–#3260</code>, <code>#3D00–#3FFF</code>, <code>#3941–#3961</code>, <code>#39A1–#39A7</code></td><td>16 384 B rezervováno</td></tr>
+        <tr><td>4</td><td>Vynulování <code>#0000–#3FFF</code>; hlavní kopie <code>#0000–#06B6</code>, <code>#2208–#33ED</code>, <code>#39A1–#39B3</code></td><td>16 384 B rezervováno</td></tr>
+      </tbody></table>
+      <p>Dodaná BSROM má na <code>#153F</code> hodnotu <code>#B0</code>, proto instalátor zvolí svou větev pro BSROM 1.40. Do volného místa BSDOSu vloží 24bajtovou vstupní rutinu.</p>
+    </div></details>
+
+    <details open><summary>Patch23388 — 137 B, STA 23296 (<code>#5B00</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Rozsah</th><th>Zapsáno / změněno</th><th>Kontrola originálu</th></tr></thead><tbody>
+        <tr><td>0 – BSROM</td><td><code>#0F06–#0F21</code></td><td>28 / 27 B</td><td class="ok">Souhlasí s očekávanými nulami</td></tr>
+        <tr><td>0 – BSROM</td><td><code>#3BFA–#3BFE</code></td><td>5 / 5 B</td><td class="ok">Souhlasí s vloženým vzorem</td></tr>
+      </tbody></table>
+      <p>Celkem cílí na 33 bajtů a skutečně mění 32. Instalátor před zápisem oba původní vzory ověřuje.</p>
+    </div></details>
+
+    <details open><summary>case_insen — 54 B, STA 32768 (<code>#8000</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Rozsah</th><th>Účel</th></tr></thead><tbody>
+        <tr><td>1 – BSDOS</td><td><code>#22D9–#22F5</code>, 29 B</td><td>Nová rutina porovnání bez rozlišení velikosti písmen</td></tr>
+        <tr><td>1 – BSDOS</td><td><code>#0D0D–#0D0E</code>, 2 B</td><td>Operand původního <code>CALL</code> se mění na <code>#22D9</code></td></tr>
+      </tbody></table>
+      <pre>#8004  LD HL,#8019
+#8007  LD DE,#22D9
+#800B  LD BC,#001D
+#800E  LDIR
+#8011  LD (#0D0D),HL</pre>
+      <p>Z původních 39 B volné oblasti <code>#22D9–#22FF</code> zůstane 10 B na <code>#22F6–#22FF</code>.</p>
+      <div class="callout danger"><strong>Prakticky ověřeno 15. 9. 2026:</strong> starý EasyHDD obsahuje na <code>#22D9–#22F5</code> tuto porovnávací rutinu. Umístění nového kódu od <code>#22DF</code> přepsalo instrukci <code>LD A,(HL)</code> a způsobilo pády příkazu <code>.SEARCH</code> s neprázdným řetězcem; prázdný řetězec chybou netrpěl. Po obnovení rutiny začal neprázdný <code>.SEARCH</code> opět fungovat. Pro nové patche je bezpečný pouze zbytek <code>#22F6–#22FF</code>.</div>
+    </div></details>
+
+    <details open><summary>m64a4_pg5 — 2 299 B, STA 30208 (<code>#7600</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Fyzický zápis</th><th>Výsledek vůči základu</th></tr></thead><tbody>
+        <tr><td>0 – BSROM</td><td>Celých <code>#0000–#3FFF</code></td><td>94 změněných bajtů, 104 B úspěšných patchovacích cílů</td></tr>
+        <tr><td>5</td><td>Celých <code>#0000–#3FFF</code></td><td>Celá stránka je vytvořený obraz</td></tr>
+      </tbody></table>
+      <p>Instalátor obsahuje 50 tabulkových patchovacích záznamů. Na dodané <code>BSROM140_EL.rom</code> projde 48; dva jsou kvůli odlišnému očekávanému originálu přeskočeny jako kolize:</p>
+      <table><thead><tr><th>Cíl</th><th>Očekáváno</th><th>V dodané BSROM</th><th>Nová data</th></tr></thead><tbody>
+        <tr><td><code>#0EEF–#0EF3</code></td><td><code>0E 21 C3 D9 0D</code></td><td><code>3C 20 00 C9 3E</code></td><td><code>0E 00 C3 D9 0D</code></td></tr>
+        <tr><td><code>#3AAE–#3AB2</code></td><td><code>04 CB 68 C0 C5</code></td><td><code>F0 03 C1 7E FE</code></td><td><code>04 3E FE D3 FE</code></td></tr>
+      </tbody></table>
+      <div class="callout danger">Protože stránku 0 sestaví z read-only BSROM a následně ji celou zkopíruje do zapisovatelné SRAM, odstraní všechny dříve provedené částečné patche stránky 0. Instalovat jako první.</div>
+    </div></details>
+
+    <details open><summary>pit103_rtc — 3 044 B, STA 27000 (<code>#6978</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Rozsah</th><th>Zapsáno / změněno</th></tr></thead><tbody>
+        <tr><td>1 – BSDOS</td><td><code>#0383–#03BD</code>; odkazy <code>#0D50</code>, <code>#0EF7–#0EF8</code>, <code>#0F11–#0F12</code></td><td>64 / 64 B</td></tr>
+        <tr><td>2</td><td><code>#0038–#0039</code>, <code>#0383–#0EFF</code></td><td>2 943 B</td></tr>
+      </tbody></table>
+      <p>Dodaný BSDOS obsahuje na <code>#0EF7</code> ukazatel <code>#2157</code>, takže první spuštění zvolí instalační větev. Opětovné spuštění při ukazateli <code>#0383</code> obnoví odkazy <code>#2157</code>, <code>#20ED</code> a bajt <code>#16</code>; tělo kódu fyzicky nemaže, pouze jej odpojí.</p>
+    </div></details>
+
+    <details open><summary>PUF11 — 178 B, STA 32768 (<code>#8000</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Rozsahy</th><th>Zapsáno / změněno</th></tr></thead><tbody>
+        <tr><td>1 – BSDOS</td><td><code>#03EB</code>, <code>#1683–#168E</code>, <code>#16D7–#1739</code>, <code>#1A9B–#1AA6</code></td><td>124 / 121 B</td></tr>
+      </tbody></table>
+      <p>Patch nevkládá nové tělo do deklarovaného volného místa; nahrazuje a nuluje části existujících rutin. Zahrnuje kontrolu verze BSDOS 3.08 a při nesouladu vypíše chybu.</p>
+    </div></details>
+
+    <details open><summary>rtc_patP2r — 402 B, STA 32768 (<code>#8000</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Rozsahy</th><th>Zapsáno / změněno</th></tr></thead><tbody>
+        <tr><td>1 – BSDOS</td><td><code>#1680–#1682</code>, <code>#3C20–#3C4D</code></td><td>49 / 42 B</td></tr>
+        <tr><td>2</td><td><code>#3AFC–#3C1D</code>, <code>#3C30–#3C36</code></td><td>297 B</td></tr>
+      </tbody></table>
+      <p>Tříbajtový vstup na <code>#1680</code> volá novou rutinu na <code>#3C20</code>. Delší část práce s RTC je ve stránce 2.</p>
+    </div></details>
+
+    <details open><summary>dos_26znak — 113 B, STA 45000 (<code>#AFC8</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Cílové rozsahy</th><th>Výsledek</th></tr></thead><tbody>
+        <tr><td>1 – BSDOS</td><td><code>#0DE5–#0DEC</code>, <code>#0DFC</code>, <code>#0DFE–#0E03</code>, <code>#0E4D–#0E54</code>, <code>#20B0–#20B9</code></td><td>33 cílových bajtů, <strong>0 rozdílů</strong></td></tr>
+      </tbody></table>
+      <p>Program zkopíruje celý BSDOS do dočasného 16KiB bufferu, upraví uvedená místa a celý obraz zapíše zpět. Všechny nové hodnoty už ale v dodaném BSDOSu jsou.</p>
+    </div></details>
+
+    <details open><summary>bluelagoon — 16 B, STA 49152 (<code>#C000</code>)</summary><div>
+      <table><thead><tr><th>Stránka</th><th>Změna</th></tr></thead><tbody>
+        <tr><td>0 – BSROM</td><td><code>#1266 := #29</code>, <code>#128E := #0F</code>; celkem 2 B</td></tr>
+      </tbody></table>
+      <pre>#C000  CALL #3C9C    ; stránka 0, zápis
+#C003  LD A,#29
+#C005  LD (#1266),A
+#C008  LD A,#0F
+#C00A  LD (#128E),A
+#C00D  JP #3C98     ; návrat do režimu čtení</pre>
+    </div></details>
+  </section>
+
+  <section>
+    <h2>7. ALASM</h2>
+    <p>TAP kontejner <code>GRUZ_128TA</code> má 42 TAP bloků, tedy 21 dvojic hlavička+data, a obsahuje varianty 42 i 64. Všech devět samostatně dodaných souborů varianty 64 je <span class="ok">bajt po bajtu totožných</span> s odpovídajícími datovými bloky v TAPu. TAP se proto nezapočítává jako další spotřeba paměti.</p>
+    <h3>Obsah balíku</h3>
+    <table>
+      <thead><tr><th>Soubor</th><th>Velikost / STA</th><th>Úloha a vztah ke stránkám</th></tr></thead>
+      <tbody>
+        <tr><td><code>GRUZ_128TA</code></td><td>68 272 B / TAP</td><td>Kontejner variant 42 a 64; není dalším rezidentním obrazem.</td></tr>
+        <tr><td><code>ala64W128g.0</code></td><td>534 B / 100 (<code>#0064</code>)</td><td>BASIC/bootstrap. Vybírá stránku 2 a zapisuje stavový bajt na <code>#2E4B</code>, tedy uvnitř již rezervovaného ALASM bloku. Přistupuje ke službě BSDOS, ale BSDOS nepatchuje.</td></tr>
+        <tr><td><code>alMB64 C.3</code></td><td>2 934 B / 32768 (<code>#8000</code>)</td><td>Vlastní MB03 instalátor: stránka 2 <code>#2710–#3251</code> a stránka 0 <code>#3CE9–#3CEE</code>.</td></tr>
+        <tr><td><code>alasm_64C.3</code></td><td>16 384 B / 32768 (<code>#8000</code>)</td><td>Hlavní ALASM. Přes <code>#62</code> vstupuje do rezidentní části stránky 2; službu BSDOS pouze volá.</td></tr>
+        <tr><td><code>olasm_64C.3</code></td><td>4 375 B / 49152 (<code>#C000</code>)</td><td>Overlay. Instalátor upravuje jeho stránkovací konstantu v pracovní RAM na adrese <code>#CE39</code>.</td></tr>
+        <tr><td><code>al508con64.3</code></td><td>1 280 B / 32768 (<code>#8000</code>)</td><td>Pomocný konverzní modul; nebyl nalezen přímý zápis přes port <code>#17</code>.</td></tr>
+        <tr><td><code>sts74.3</code></td><td>9 472 B / 56064 (<code>#DB00</code>)</td><td>Pomocný modul/data; nebyl nalezen přímý zápis přes port <code>#17</code>.</td></tr>
+        <tr><td><code>FONT64a C.3</code></td><td>1 024 B / 40000 (<code>#9C40</code>)</td><td>Fontová data; žádná samostatná SRAM instalace.</td></tr>
+        <tr><td><code>128KDRV C.3</code></td><td>255 B / 28672 (<code>#7000</code>)</td><td>128K pomocný ovladač; nebyl nalezen přímý přístup k MB03 portu <code>#17</code>.</td></tr>
+        <tr><td><code>SAVOB4MBH.3</code></td><td>1 012 B / 32768 (<code>#8000</code>)</td><td>Pomocný ukládací modul; žádná samostatná instalace do stránek 0–5 nebyla nalezena.</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead><tr><th>Instalační zásah ALASM</th><th>Rozsah</th><th>Délka</th></tr></thead>
+      <tbody>
+        <tr><td>Stránka 2 – rezidentní kód z <code>alMB64 C</code></td><td><code>#2710–#3251</code></td><td>2 882 B</td></tr>
+        <tr><td>Stránka 0/BSROM – I/O pomocná rutina</td><td><code>#3CE9–#3CEE</code></td><td>6 B</td></tr>
+        <tr><td>Stránka 1/BSDOS</td><td>žádný instalační zápis</td><td>0 B</td></tr>
+      </tbody>
+    </table>
+    <pre>#8001  LD A,#62       ; fyzická stránka 2, zápis
+#8009  OUT (#17),A
+#800B  LD HL,#8034
+#800E  LD DE,#2710
+#8011  LD BC,#0B42
+#8014  LDIR
+#8016  LD A,#60       ; fyzická stránka 0, zápis
+#8018  OUT (#17),A
+#801A  LD HL,#802E
+#801D  LD DE,#3CE9
+#8020  LD BC,#0006
+#8023  LDIR</pre>
+    <p>Šest bajtů v BSROM je <code>ED 79 43 ED 69 C9</code> (<code>OUT (C),A / LD B,E / OUT (C),L / RET</code>). V dodané <code>BSROM140_EL.rom</code> na této adrese nejsou volné bajty, ale obrazová data znakové sady; ALASM je vědomě přepisuje pomocnou rutinou.</p>
+    <p><code>alasm_64C</code> při práci krátce vybírá BSDOS a volá jeho službu, ale neinstaluje do něj žádný kód. Do stránky 2 přechází přes <code>LD A,#62 / OUT (#17),A / JP #2710</code>.</p>
+    <h3>Přestěhování ALASM ze stránky 2</h3>
+    <p>Je možné, ale není to změna jediného bajtu. Je nutné upravit všechny konstanty výběru stránky v bootstrapu, instalátoru, hlavním ALASM a overlayi. Pro fyzickou stránku 6 by se zápisový výběr změnil z <code>#62</code> na <code>#66</code>. Šestibajtový obecný hook v BSROM nemusí měnit umístění, pokud se zachová jeho rozhraní.</p>
+    <div class="callout note"><strong>Pravidlo projektu:</strong> stránka 2 patří přednostně EasySD/EasyCF. Pokud jejich obraz zasahuje do <code>#2710–#3251</code> nebo stránku vytváří celou, ALASM se přemístí.</div>
+  </section>
+
+  <section>
+    <h2>8. Kolize a pořadí instalace / Conflicts</h2>
+    <table>
+      <thead><tr><th>Situace</th><th>Výsledek</th><th>Doporučení</th></tr></thead>
+      <tbody>
+        <tr><td>Historické patche ve stránce 2</td><td class="ok">Jejich instalované rozsahy se nepřekrývají.</td><td>Mohou koexistovat z hlediska adres.</td></tr>
+        <tr><td><code>m64a4_pg5</code> po jiných BSROM patchích</td><td class="bad">Celostránková kopie je smaže.</td><td><code>m64a4_pg5</code> instalovat první.</td></tr>
+        <tr><td><code>m64a4_pg5</code> proti <code>BSROM140_EL</code></td><td class="warn">Dva z 50 záznamů hlásí kolizi a jsou přeskočeny.</td><td>Prověřit, zda existuje EL varianta tabulky.</td></tr>
+        <tr><td>ALASM a EasyCF ve stránce 2</td><td class="ok">EasyCF končí před <code>#109F</code> a font začíná na <code>#3D00</code>; ALASM <code>#2710–#3251</code> se adresně nepřekrývá.</td><td>Mohou koexistovat; EasySD/EasyCF má podle pravidla projektu prioritu při budoucím růstu.</td></tr>
+        <tr><td>NMI ve stránkách 3 a 4</td><td class="bad">Instalátor obě stránky celé nuluje.</td><td>Nesdílet je s jiným rezidentním programem.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>9. EasySD/EasyCF 1.0.1 a 1.1 — finální MB03+ instalátory</h2>
+    <p>Čtyři vydané varianty byly analyzovány z finálních zdrojů, assemblerových listingů a binárních/TAP výstupů. U EasySD 1.0.1 byl kódový blok vytažen přímo z vydaného <code>EasySD_MB_BIN.tap</code> (13 568 B binárních dat); délky kopírovaných bloků byly odečteny z reálných instrukcí instalátoru. Tabulky uvádějí fyzické stránky, nikoli pouze hodnoty zapisované na port <code>#17</code>.</p>
+
+    <h3>9.1 Rezidentní mapa driverových stránek</h3>
+    <table class="patch-overview">
+      <thead><tr><th>Varianta</th><th>Fyzická stránka</th><th>Trvale zapisované rozsahy</th><th>Obsazeno instalátorem</th><th>Nezapsáno po započtení historických instalací</th></tr></thead>
+      <tbody>
+        <tr class="patch-start"><td class="patch-name">EasyCF 1.0.1</td><td><span class="page-badge page2">2</span><br><span class="small">zápis <code>#62</code> / 98</span></td><td><code>#0000–#002E</code> (47 B), <code>#0038–#0039</code> (2 B), <code>#0090–#02D8</code> (585 B), <code>#0F00–#0F9F</code> (160 B), <code>#0FA0–#109F</code> (256 B), <code>#3D00–#3FFF</code> (768 B)</td><td><strong>1 818 B</strong></td><td><strong>8 369 B</strong> z původních 10 185 B nezapsaných oblastí stránky 2; dva bajty <code>#0038–#0039</code> již používá PIT.</td></tr>
+        <tr class="patch-start"><td class="patch-name">EasySD 1.0.1</td><td><span class="page-badge page2">2</span><br><span class="small">zápis <code>#62</code> / 98</span></td><td><code>#0000–#002E</code> (47 B), <code>#0038–#0039</code> (2 B), <code>#0090–#0318</code> (649 B), <code>#0F00–#12FF</code> (1 024 B), <code>#1300–#13FF</code> (256 B), <code>#3D00–#3FFF</code> (768 B)</td><td><strong>2 746 B</strong></td><td><strong>7 441 B</strong> z původních 10 185 B nezapsaných oblastí stránky 2.</td></tr>
+        <tr class="patch-start"><td class="patch-name">EasyCF 1.1</td><td><span class="page-badge page2">2</span><br><span class="small">zápis <code>#62</code> / 98</span></td><td><code>#0000–#002E</code> (47 B), <code>#0038–#0039</code> (2 B), <code>#0090–#02D8</code> (585 B), <code>#0F00–#0F9F</code> (160 B), <code>#0FA0–#109F</code> (256 B), <code>#3D00–#3FFF</code> (768 B)</td><td><strong>1 818 B</strong></td><td><strong>8 369 B</strong> z původních 10 185 B nezapsaných oblastí stránky 2.</td></tr>
+        <tr class="patch-start"><td class="patch-name">EasySD 1.1</td><td><span class="page-badge page9">9 výchozí</span><br><span class="small">volitelně 6–32; zápis stránky 9 = <code>#69</code> / 105</span></td><td><code>#0000–#002D</code> (46 B), <code>#0038–#0039</code> (2 B), <code>#0090–#037E</code> (751 B), <code>#0F00–#12FF</code> (1 024 B), <code>#1300–#13FF</code> (256 B), <code>#3C90–#3C97</code> (8 B), <code>#3D00–#3FFF</code> (768 B)</td><td><strong>2 855 B</strong></td><td><strong>13 529 B</strong> v jinak samostatné 16KiB stránce; číslo je přesný doplněk instalačních zápisů, nikoli obecné potvrzení, že prostor smí použít jiný program.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout note"><strong>1.0.1 je alternativní instalace:</strong> EasySD 1.0.1 a EasyCF 1.0.1 se ve stránce 2 navzájem přepisují. <strong>1.1 je společná instalace:</strong> EasyCF 1.1 zůstává ve stránce 2 a EasySD 1.1 používá vlastní stránku (výchozí 9), takže oba ovladače mohou být současně přítomné.</div>
+
+    <h3>9.2 Zápisy do fyzické stránky 1 – BSDOS</h3>
+    <p class="small">Níže jsou sloučené cílové rozsahy po dokončení instalace. Součty neobsahují volitelné <code>no_verify</code> a DMA úpravy; ty mohou navíc změnit 2 B, respektive 22 B stávajícího BSDOS kódu, ale neleží v potvrzených volných oblastech této zprávy.</p>
+    <table>
+      <thead><tr><th>Varianta</th><th>Sloučené trvalé zápisy do BSDOSu</th><th>Unikátní cíle</th><th>Spotřeba z 208 B historicky zbývajícího potvrzeného volna</th></tr></thead>
+      <tbody>
+        <tr><td>EasyCF 1.0.1</td><td><code>#0014–#001F</code>, <code>#0023–#0027</code>, <code>#002B–#002D</code>, <code>#003E–#0048</code>, <code>#0090–#00FF</code>, <code>#019F–#01A0</code>, <code>#020E–#020F</code>, <code>#0233–#0234</code>, <code>#0358–#036A</code>, <code>#0DC4–#0DD1</code>, <code>#123A–#1240</code>, <code>#17C3–#17C5</code>, <code>#1B7A–#1B7C</code>, <code>#1CEA–#1D2B</code>, <code>#21A1</code>, <code>#3CE8–#3CEF</code></td><td>270 B</td><td>139 B; zbývá 69 B</td></tr>
+        <tr><td>EasySD 1.0.1</td><td>Stejná adresní mapa jako EasyCF 1.0.1; liší se rezidentní driver a text katalogu.</td><td>270 B</td><td>139 B; zbývá 69 B</td></tr>
+        <tr><td>EasyCF 1.1</td><td><code>#0014–#001F</code>, <code>#0023–#0027</code>, <code>#002B–#002D</code>, <code>#003E–#0048</code>, <code>#0090–#00FF</code>, <code>#019F–#01A0</code>, <code>#020E–#020F</code>, <code>#0233–#0234</code>, <code>#0358–#036A</code>, <code>#0DC1–#0DE0</code>, <code>#0DF8–#0DFA</code>, <code>#123A–#1240</code>, <code>#17C3–#17CA</code>, <code>#1B7A–#1B7C</code>, <code>#1CEA–#1D2B</code>, <code>#21A1</code>, <code>#22F6–#22FF</code>, <code>#3CE8–#3CEF</code></td><td>306 B</td><td>149 B; zbývá 59 B</td></tr>
+        <tr><td>EasySD 1.1</td><td><code>#001B–#001F</code>, <code>#0032–#0035</code>, <code>#003E–#0048</code>, <code>#0090–#00FF</code>, <code>#019F–#01A0</code>, <code>#020E–#020F</code>, <code>#0233–#0234</code>, <code>#0358–#037D</code>, <code>#0DC1–#0DE0</code>, <code>#0DF8–#0DFA</code>, <code>#123A–#1240</code>, <code>#17C3–#17CA</code>, <code>#1B7A–#1B7C</code>, <code>#1CEA–#1D2B</code>, <code>#21A1</code>, <code>#22F6–#22FF</code>, <code>#3C90–#3C94</code>, <code>#3CE8–#3CEF</code></td><td>319 B</td><td>173 B; zbývá 35 B</td></tr>
+      </tbody>
+    </table>
+    <p><strong>Poznámka k <code>#0090–#00FF</code>:</strong> všechna čtyři vydání sem do BSDOSu kopírují 112bajtový bankovní/service stub. Dřívější podmíněné volno pro ramdrive je proto po instalaci EasySD/EasyCF celé obsazeno.</p>
+
+    <h3>9.3 Co přesně zůstává volné</h3>
+    <table class="free-table">
+      <thead><tr><th>Stav po instalaci</th><th>Potvrzené volné rozsahy v BSDOSu (stránka 1)</th><th>Celkem</th></tr></thead>
+      <tbody>
+        <tr><td>EasyCF 1.0.1 nebo EasySD 1.0.1</td><td><code>#006C–#007F</code> (20 B), <code>#036B–#0382</code> (24 B), <code>#03BE–#03BF</code> (2 B), <code>#22F6–#22FF</code> (10 B), <code>#3C90–#3C97</code> (8 B), <code>#3CE3–#3CE7</code> (5 B)</td><td><strong>69 B</strong></td></tr>
+        <tr><td>EasyCF 1.1 samostatně</td><td><code>#006C–#007F</code> (20 B), <code>#036B–#0382</code> (24 B), <code>#03BE–#03BF</code> (2 B), <code>#3C90–#3C97</code> (8 B), <code>#3CE3–#3CE7</code> (5 B)</td><td><strong>59 B</strong></td></tr>
+        <tr class="free-total"><td>Finální společná instalace EasyCF 1.1 + EasySD 1.1</td><td><code>#006C–#007F</code> (20 B), <code>#037E–#0382</code> (5 B), <code>#03BE–#03BF</code> (2 B), <code>#3C95–#3C97</code> (3 B), <code>#3CE3–#3CE7</code> (5 B)</td><td><strong>35 B</strong></td></tr>
+      </tbody>
+    </table>
+
+    <h4>Nezapsané oblasti driverových stránek po finálním systému 1.1</h4>
+    <table>
+      <thead><tr><th>Fyzická stránka</th><th>Nezapsané rozsahy</th><th>Celkem</th><th>Význam</th></tr></thead>
+      <tbody>
+        <tr><td><span class="page-badge page2">2 – EasyCF</span></td><td><code>#002F–#0037</code> (9 B), <code>#003A–#008F</code> (86 B), <code>#02D9–#0382</code> (170 B), <code>#10A0–#270F</code> (5 744 B), <code>#3252–#39A0</code> (1 871 B), <code>#39EE–#3AFB</code> (270 B), <code>#3C1E–#3C2F</code> (18 B), <code>#3C37–#3CFF</code> (201 B)</td><td><strong>8 369 B</strong></td><td>Po odečtení všech dříve mapovaných historických instalací i EasyCF 1.1. ALASM na <code>#2710–#3251</code> se s EasyCF nepřekrývá.</td></tr>
+        <tr><td><span class="page-badge page9">9 – EasySD</span></td><td><code>#002E–#0037</code> (10 B), <code>#003A–#008F</code> (86 B), <code>#037F–#0EFF</code> (2 945 B), <code>#1400–#3C8F</code> (10 384 B), <code>#3C98–#3CFF</code> (104 B)</td><td><strong>13 529 B</strong></td><td>Výchozí samostatná stránka EasySD 1.1. Stejná mapa platí při zvolení jiné nepoužívané stránky 6–32.</td></tr>
+        <tr><td>3, 4 a 5</td><td><code>—</code></td><td><strong>0 B bezpečně uvolněno</strong></td><td>Stránky 3 a 4 vlastní NMI instalace, stránku 5 celý zapisuje <code>m64a4_pg5</code>.</td></tr>
+        <tr><td>0 – BSROM</td><td><code>—</code></td><td><strong>bez nové rezervy</strong></td><td>Částečné nulové nebo nezměněné oblasti nejsou bez samostatné funkční analýzy prohlášeny za volné; <code>m64a4_pg5</code> navíc zapisuje celý 16KiB obraz.</td></tr>
+      </tbody>
+    </table>
+    <div class="callout"><strong>Praktický závěr:</strong> pro další malý BSDOS patch jsou po finální instalaci 1.1 bezpečně doložené jen bloky 20 B, 5 B, 2 B, 3 B a 5 B (celkem 35 B). Velké nezapsané úseky ve stránkách 2 a 9 nejsou automaticky „sdílená volná RAM“: jsou součástí driverových bank a jejich použití musí respektovat budoucí růst EasyCF/EasySD, pracovní data a bankovní protokol.</div>
+
+    <h3>9.4 Kolize a pořadí</h3>
+    <ul>
+      <li><strong>EasyCF 1.0.1 a EasySD 1.0.1:</strong> neinstalovat současně; oba přepisují fyzickou stránku 2.</li>
+      <li><strong>EasyCF/EasySD 1.1:</strong> nejdříve EasyCF 1.1, potom <code>EasySD_1_1_INSTALL.tap</code>. EasySD doplní společné přepínání a používá vlastní SD stránku.</li>
+      <li><strong>ALASM:</strong> adresně se s rezidentními rozsahy EasyCF ve stránce 2 nepřekrývá, ale podle zadání má EasySD/EasyCF přednost a ALASM lze v budoucnu přemístit.</li>
+      <li><strong><code>m64a4_pg5</code>:</strong> nadále musí přijít jako první, protože znovu vytvoří celou stránku 0/BSROM; až potom patche BSROM a ostatní instalace.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>10. Omezení auditu / Scope limits</h2>
+    <ul>
+      <li>Výsledky popisují deterministické instalační zápisy a zjevné rezidentní rozsahy. Běžná pracovní RAM, stacky, diskové buffery a dynamická data za běhu nejsou započítána jako trvale instalovaný patch.</li>
+      <li>EasySD/EasyCF 1.0.1 a 1.1 jsou analyzovány pro finální vydané MB03+ instalátory. eLeMeNt ZX a MB03+ Slim mají odlišný jednopage model a nejsou zahrnuty do součtů v oddílu 9.</li>
+      <li>Počty „nezapsáno“ ve driverových stránkách jsou přesným doplňkem statických instalačních zápisů. Nejsou samy o sobě zárukou, že rozsah nemůže používat runtime, stack, buffer nebo budoucí verze ovladače.</li>
+      <li>Dvě kolize <code>m64a4_pg5</code> jsou výsledkem skutečného porovnání s dodanou EL BSROM; nejde o odhad.</li>
+      <li>Bezpečné volné místo je potvrzeno jen tam, kde bylo dodáno jako původní mapa a ověřeno proti binárce. Dlouhé běhy <code>#00</code> nebo <code>#FF</code> samy o sobě nestačí.</li>
+    </ul>
+  </section>
+</main>
+</body>
+</html>
