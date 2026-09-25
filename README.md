@@ -1,8 +1,18 @@
-# BSDOS Patch Map
+
+
+\# BSDOS Patch Map
+
+
 
 Memory map and free-space overview for BSDOS, BSROM and MB03+ SRAM.
 
-- `BSDOS_BSROM_patch_audit_completed_v3.html` contains the historical BSDOS/BSROM patch analysis.
-- `BSDOS_BSROM_patch_audit_completed_v4.html` is the current version and adds EasySD and EasyCF 1.0.1/1.1, occupied ranges, collisions and remaining free space.
 
-Open the HTML files in a web browser. Version 4 is the recommended overview.
+
+\- \[Version 3 – historical BSDOS/BSROM patch analysis](https://milan-stava.github.io/BSDOS-patch-map/BSDOS\_BSROM\_patch\_audit\_completed\_v3.html)
+
+\- \[Version 4 – current overview including EasySD/EasyCF 1.0.1 and 1.1](https://milan-stava.github.io/BSDOS-patch-map/BSDOS\_BSROM\_patch\_audit\_completed\_v4.html)
+
+
+
+\*\*Version 4 is the current and recommended overview.\*\*
+
